@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0f17">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Vendas">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<title>Vendas</title>
+<style>
+  body{margin:0;background:#0b0f17;color:#e8ecf3;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:max(24px,env(safe-area-inset-top)) 16px 24px}
+  main{max-width:480px;margin:0 auto}
+  h1{font-size:22px;margin:8px 0 4px}
+  p{color:#8a94a7;font-size:14px;line-height:1.5}
+  .card{background:#141a26;border:1px solid #222b3b;border-radius:14px;padding:16px;margin-top:16px}
+  button{width:100%;border:0;border-radius:10px;padding:14px;font-size:16px;font-weight:600;color:#fff;background:#22c55e;margin-top:8px}
+  button.sec{background:#222b3b}
+  textarea{width:100%;box-sizing:border-box;min-height:140px;background:#0b0f17;color:#e8ecf3;border:1px solid #222b3b;border-radius:10px;padding:10px;font-size:12px;font-family:ui-monospace,monospace}
+  .ok{color:#22c55e}.err{color:#ef4444}
+  ol{color:#8a94a7;font-size:14px;padding-left:20px;line-height:1.6}
+</style>
+</head>
+<body>
+<main>
+  <h1>Vendas</h1>
+  <p>Notificações de venda aprovada neste aparelho.</p>
+
+  <div class="card" id="status"><p>Carregando…</p></div>
+
+  <div class="card" id="codebox" hidden>
+    <p><b>Código deste aparelho</b> — copie e salve no GitHub (Settings → Secrets and variables → Actions → <b>PUSH_SUB_1</b>, ou PUSH_SUB_2, 3… para outros celulares).</p>
+    <textarea id="code" readonly></textarea>
+    <button id="copy" class="sec">Copiar código</button>
+  </div>
+</main>
+<script>
+const VAPID_PUBLIC_KEY = "BMFI3J65FJtkkrW8ngCoRzC4fFF_Lrf9pmbwJjqHYRYQC-p4ZS9JyDjri-N6RppCi4nVG05RaMK3-HYpZ-AJ6q0";
+const $ = (id) => document.getElementById(id);
+
+function b64ToUint8(b64){const pad="=".repeat((4-b64.length%4)%4);const raw=atob((b64+pad).replace(/-/g,"+").replace(/_/g,"/"));return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));}
+
+function show(html){ $("status").innerHTML = html; }
+function showCode(sub){ $("codebox").hidden=false; $("code").value = JSON.stringify(sub); }
+
+async function init(){
+  const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  if(!("serviceWorker" in navigator) || !("PushManager" in window)){
+    return show(ios && !standalone
+      ? '<p>No iPhone:</p><ol><li>Toque em <b>Compartilhar</b></li><li><b>Adicionar à Tela de Início</b></li><li>Abra o app pelo ícone e volte aqui</li></ol>'
+      : '<p class="err">Este navegador não suporta notificações push.</p>');
+  }
+  const reg = await navigator.serviceWorker.register("sw.js");
+  await navigator.serviceWorker.ready;
+  if(Notification.permission === "denied") return show('<p class="err">Notificações bloqueadas. Libere nas configurações do celular.</p>');
+  const sub = await reg.pushManager.getSubscription();
+  if(sub){
+    show('<p class="ok">🔔 Notificações ativas neste aparelho.</p><button class="sec" id="test">Testar notificação local</button>');
+    $("test").onclick = () => reg.showNotification("Venda aprovada!", {body:"Valor: R$ 50,00 (teste)", icon:"icon-192.png"});
+    showCode(sub);
+  } else {
+    show('<p>Toque para ativar as notificações.</p><button id="on">Ativar notificações</button>');
+    $("on").onclick = async () => {
+      const p = await Notification.requestPermission();
+      if(p !== "granted") return show('<p class="err">Permissão negada.</p>');
+      await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:b64ToUint8(VAPID_PUBLIC_KEY)});
+      init();
+    };
+  }
+}
+$("copy").onclick = async () => {
+  try{ await navigator.clipboard.writeText($("code").value); $("copy").textContent="Copiado ✓"; }
+  catch{ $("code").select(); document.execCommand("copy"); $("copy").textContent="Copiado ✓"; }
+};
+init().catch(e => show('<p class="err">Erro: '+e.message+'</p>'));
+</script>
+</body>
+</html>
