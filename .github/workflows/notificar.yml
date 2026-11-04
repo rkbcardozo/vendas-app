@@ -1,0 +1,55 @@
+name: Notificar vendas
+
+on:
+  schedule:
+    - cron: "*/5 * * * *" # a cada 5 min (o GitHub pode atrasar)
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "check = checar depósitos | test = mandar notificação de teste"
+        default: check
+        type: choice
+        options: [check, test]
+
+concurrency:
+  group: notificar
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Restaurar estado
+        uses: actions/cache/restore@v4
+        with:
+          path: state
+          key: seen-${{ github.run_id }}
+          restore-keys: seen-
+      - run: npm install --no-audit --no-fund --silent
+      - name: Checar depósitos
+        run: node check.mjs
+        env:
+          MODE: ${{ inputs.mode || 'check' }}
+          BACKOFFICE_API_URL: ${{ secrets.BACKOFFICE_API_URL }}
+          BACKOFFICE_TOKEN: ${{ secrets.BACKOFFICE_TOKEN }}
+          BACKOFFICE_AUTH_HEADER: ${{ secrets.BACKOFFICE_AUTH_HEADER }}
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          NOTIFY_TITLE: ${{ vars.NOTIFY_TITLE }}
+          NOTIFY_BODY: ${{ vars.NOTIFY_BODY }}
+          PUSH_SUB_1: ${{ secrets.PUSH_SUB_1 }}
+          PUSH_SUB_2: ${{ secrets.PUSH_SUB_2 }}
+          PUSH_SUB_3: ${{ secrets.PUSH_SUB_3 }}
+          PUSH_SUB_4: ${{ secrets.PUSH_SUB_4 }}
+          PUSH_SUB_5: ${{ secrets.PUSH_SUB_5 }}
+      - name: Salvar estado
+        if: always() && hashFiles('state/seen.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: state
+          key: seen-${{ github.run_id }}
